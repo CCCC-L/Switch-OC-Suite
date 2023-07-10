@@ -1,0 +1,95 @@
+name: Build
+
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64:20220216
+
+    steps:
+    - uses: actions/checkout@v1
+      with:
+        submodules: recursive
+      
+    - name: sinicization
+      run: |
+        echo "change format.h"
+        sed -i -z 's/"Do not override"/"默认"/' Source/sys-clk-OC/overlay/src/ui/format.h
+        
+        echo "change freq_choice_gui.h"
+        sed -i -z 's/"Do not override"/"默认"/' Source/sys-clk-OC/overlay/src/ui/gui/freq_choice_gui.h
+        
+        echo "change misc_gui.cpp"
+        sed -i -z 's/"Charging Current/"充电电流/g' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.cpp
+        sed -i -z 's/"Charging Limit/"充电限制/' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.cpp
+        sed -i -z 's/"\\uE016 Long-term use may render the battery gauge \\ninaccurate!"/"\\uE016 长期使用可能会导致电池电量不准确!"/' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.cpp
+        sed -i -z 's/"Battery Charging Limit/"电池充电限制/' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.cpp
+        sed -i -z 's/"Config"/"配置"/'  Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.cpp
+        sed -i -z 's/"Temporary toggles"/"临时开关"/'  Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.cpp
+        sed -i -z 's/"Info"/"信息"/'  Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.cpp
+        sed -i -z 's/(Now:/(当前:/g' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.cpp
+        sed -i -z 's/"Force Disable Charging"/"强制禁用充电"/'  Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.cpp
+        sed -i -z 's/"Screen Backlight"/"点亮屏幕"/'  Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.cpp
+        
+        echo "change misc_gui.h"
+        sed -i -z 's/"Charger:\\n"/"充电器:\\n"/' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.h
+        sed -i -z 's/"Battery:\\n"/"电池:\\n"/' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.h
+        sed -i -z 's/"Current Limit:\\n"/"电流限制:\\n"/' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.h
+        sed -i -z 's/"Charging Limit:\\n"/"充电限制:\\n"/' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.h
+        sed -i -z 's/"Raw Charge:\\n"/"原始电量:\\n"/' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.h
+        sed -i -z 's/"Battery Age:\\n"/"电池寿命:\\n"/' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.h
+        sed -i -z 's/"Power Role:\\n"/"充电状态:\\n"/' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.h
+        sed -i -z 's/"Current Flow:\\n\\n"/"当前功耗:\\n\\n"/' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.h
+        sed -i -z 's/"CPU Volt:\\n"/"CPU电压:\\n"/' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.h
+        sed -i -z 's/"GPU Volt:\\n"/"GPU电压:\\n"/' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.h
+        sed -i -z 's/"DRAM Volt:"/"内存电压:\\n"/' Source/sys-clk-OC/overlay/src/ui/gui/misc_gui.h
+        
+        echo "change app_profile_gui.cpp"
+        sed -i -z 's/"Application changed\\n\\n"\n            "\\n"\n            "The running application changed\\n\\n"\n            "while editing was going on."/"应用程序发生更改"\n            "\\n"\n            "在编辑的过程中应用程序发生更改"/' Source/sys-clk-OC/overlay/src/ui/gui/app_profile_gui.cpp
+        
+        echo "change config.h"
+        sed -i -z 's/"Auto CPU Boost"/"CPU 睿频"/' Source/sys-clk-OC/common/include/sysclk/config.h
+        sed -i -z 's/"Sync ReverseNX Mode Sync"/"同步底座"/' Source/sys-clk-OC/common/include/sysclk/config.h
+        sed -i -z 's/"Frequency Governor (Experimental)"/"自动调频 (实验)"/' Source/sys-clk-OC/common/include/sysclk/config.h
+        
+        echo "change clocks.h"
+        sed -i -z 's/? "Docked"/? "底座"/' Source/sys-clk-OC/common/include/sysclk/clocks.h
+        sed -i -z 's/? "Handheld"/? "手持"/' Source/sys-clk-OC/common/include/sysclk/clocks.h
+        sed -i -z 's/? "Charging"/? "充电器"/' Source/sys-clk-OC/common/include/sysclk/clocks.h
+        sed -i -z 's/? "USB Charger"/? "USB 充电器"/' Source/sys-clk-OC/common/include/sysclk/clocks.h
+        sed -i -z 's/? "Official Charger"/? "官方充电器"/' Source/sys-clk-OC/common/include/sysclk/clocks.h
+        sed -i -z 's/? "Memory"/? "内存"/' Source/sys-clk-OC/common/include/sysclk/clocks.h
+        
+        echo "change fatal_gui.cpp"
+        sed -i -z 's/"Could not connect to sys-clk.\\n\\n"\n        "\\n"\n        "Please make sure everything is\\n\\n"\n        "correctly installed and enabled."/"无法连接到 sys-clk.\\n\\n"\n        "\\n"\n        "请确保已正确安装并启用."/' Source/sys-clk-OC/overlay/src/ui/gui/fatal_gui.cpp
+        sed -i -z 's/"Fatal error"/"致命错误"/' Source/sys-clk-OC/overlay/src/ui/gui/fatal_gui.cpp
+        sed -i -z 's/"CPU Freq Governor"/"CPU自动调频"/' Source/sys-clk-OC/overlay/src/ui/gui/app_profile_gui.cpp
+        sed -i -z 's/"GPU Freq Governor"/"GPU自动调频"/' Source/sys-clk-OC/overlay/src/ui/gui/app_profile_gui.cpp
+        
+        echo "change base_menu_gui.cpp"
+        sed -i -z 's/"App ID: "/"程序ID: "/' Source/sys-clk-OC/overlay/src/ui/gui/base_menu_gui.cpp
+        sed -i -z 's/"Profile: "/" 配置: "/' Source/sys-clk-OC/overlay/src/ui/gui/base_menu_gui.cpp
+        sed -i -z 's/("MEM:"/("内存:"/' Source/sys-clk-OC/overlay/src/ui/gui/base_menu_gui.cpp
+        sed -i -z 's/"SOC:"/"芯片"/' Source/sys-clk-OC/overlay/src/ui/gui/base_menu_gui.cpp
+        sed -i -z 's/"PCB:"/"主板"/' Source/sys-clk-OC/overlay/src/ui/gui/base_menu_gui.cpp
+        sed -i -z 's/"Skin:"/"机身"/' Source/sys-clk-OC/overlay/src/ui/gui/base_menu_gui.cpp
+        
+        echo "change  main_gui.cpp"
+        sed -i -z 's/"Enable"/"启用"/' Source/sys-clk-OC/overlay/src/ui/gui/main_gui.cpp
+        sed -i -z 's/"Edit app profile"/"编辑程序配置"/' Source/sys-clk-OC/overlay/src/ui/gui/main_gui.cpp
+        sed -i -z 's/"Advanced"/"高级"/' Source/sys-clk-OC/overlay/src/ui/gui/main_gui.cpp
+        sed -i -z 's/"Temporary overrides"/"临时超频"/' Source/sys-clk-OC/overlay/src/ui/gui/main_gui.cpp
+        sed -i -z 's/"Global profile"/"全局超频"/' Source/sys-clk-OC/overlay/src/ui/gui/main_gui.cpp
+        sed -i -z 's/"Miscellaneous"/"杂项"/' Source/sys-clk-OC/overlay/src/ui/gui/main_gui.cpp
+        
+        echo "change base_gui.cpp"
+        sed -i -z 's/"Sys-clk-OC overlay"/"极限超频"/' Source/sys-clk-OC/overlay/src/ui/gui/base_gui.cpp
+        
+    - name: build
+      run: bash Source/sys-clk-OC/build.sh
+
+    - uses: actions/upload-artifact@master
+      with:
+        name: sdout
+        path: Source/sys-clk-OC/dist/
