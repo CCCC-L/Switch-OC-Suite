@@ -131,15 +131,6 @@ void MemMtcTableAutoAdjust(MarikoMtcTable* table, const MarikoMtcTable* ref) {
 
     #define ADJUST_PARAM_TABLE(TABLE, PARAM, REF)    ADJUST_PARAM(TABLE->PARAM, REF->PARAM)
 
-    u32 bracket;
-    if (C.marikoEmcMaxClock < 2400000) {
-        bracket = 0;
-    } else if (C.marikoEmcMaxClock < 2665600) {
-        bracket = 1;
-    } else {
-        bracket = 2;
-    }
-
     // Burst Register
     #define ADJUST_PARAM_ALL_REG(TABLE, PARAM, REF)                 \
         ADJUST_PARAM_TABLE(TABLE, burst_regs.PARAM, REF)            \
@@ -203,7 +194,7 @@ void MemMtcTableAutoAdjust(MarikoMtcTable* table, const MarikoMtcTable* ref) {
     #define CLEAR_BIT(BITS, HIGH, LOW)  \
         BITS = BITS & ~( ((1u << HIGH) << 1u) - (1u << LOW) );
     
-    #define ADJUST(TARGET)              (u32)(TARGET * (C.marikoEmcMaxClock / EmcClkOSLimit))
+    #define ADJUST(TARGET)              (u32)CEIL(TARGET * (C.marikoEmcMaxClock / EmcClkOSLimit))
     #define ADJUST_INVERSE(TARGET)      (u32)(TARGET * (EmcClkOSLimit / 1000) / (C.marikoEmcMaxClock / 1000))
     
     // Burst MC Regs
@@ -212,7 +203,7 @@ void MemMtcTableAutoAdjust(MarikoMtcTable* table, const MarikoMtcTable* ref) {
     constexpr u32 MC_ARB_DIV = 4;
     constexpr u32 MC_ARB_SFA = 2;
 
-    WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_cfg,            table->burst_mc_regs.mc_emem_arb_cfg + 1 + bracket);
+    WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_cfg,            C.marikoEmcMaxClock / (33.3 * 1000) / MC_ARB_DIV); //CYCLES_PER_UPDATE: The number of mcclk cycles per deadline timer update
     WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_timing_rcd,     CEIL(GET_CYCLE_CEIL(tRCD) / MC_ARB_DIV) - 2)
     WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_timing_rp,      CEIL(GET_CYCLE_CEIL(tRPpb) / MC_ARB_DIV) - 1 + MC_ARB_SFA)
     WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_timing_rc,      CEIL(GET_CYCLE_CEIL(tRC) / MC_ARB_DIV) - 1)
@@ -227,60 +218,65 @@ void MemMtcTableAutoAdjust(MarikoMtcTable* table, const MarikoMtcTable* ref) {
     WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_timing_rfcpb,   CEIL(GET_CYCLE_CEIL(tRFCpb) / MC_ARB_DIV))
 
     u32 DA_TURNS = 0;
-    DA_TURNS |= u8(table->burst_mc_regs.mc_emem_arb_timing_r2w / 2) << 16;
-    DA_TURNS |= u8(table->burst_mc_regs.mc_emem_arb_timing_w2r / 2) << 24;
+    DA_TURNS |= u8(table->burst_mc_regs.mc_emem_arb_timing_r2w / 2) << 16; //R2W TURN
+    DA_TURNS |= u8(table->burst_mc_regs.mc_emem_arb_timing_w2r / 2) << 24; //W2R TURN
     WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_da_turns,       DA_TURNS);
     u32 DA_COVERS = 0;
     u8 R_COVER = (table->burst_mc_regs.mc_emem_arb_timing_rap2pre + table->burst_mc_regs.mc_emem_arb_timing_rp + table->burst_mc_regs.mc_emem_arb_timing_rcd) / 2;
     u8 W_COVER = (table->burst_mc_regs.mc_emem_arb_timing_wap2pre + table->burst_mc_regs.mc_emem_arb_timing_rp + table->burst_mc_regs.mc_emem_arb_timing_rcd) / 2;
-    DA_COVERS |= (u8)(table->burst_mc_regs.mc_emem_arb_timing_rc / 2);
-    DA_COVERS |= (R_COVER << 16);
-    DA_COVERS |= (W_COVER << 24);
+    DA_COVERS |= (u8)(table->burst_mc_regs.mc_emem_arb_timing_rc / 2); //RC COVER
+    DA_COVERS |= (R_COVER << 8); //RCD_R COVER
+    DA_COVERS |= (W_COVER << 16); //RCD_W COVER
     WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_da_covers,       DA_COVERS);
 
     CLEAR_BIT(table->burst_mc_regs.mc_emem_arb_misc0, 7, 0);
-    table->burst_mc_regs.mc_emem_arb_misc0 |= (table->burst_mc_regs.mc_emem_arb_timing_rc + 1);
+    table->burst_mc_regs.mc_emem_arb_misc0 |= u8(table->burst_mc_regs.mc_emem_arb_timing_rc + 1); //BC2AA_HOLDOFF
     CLEAR_BIT(table->burst_mc_regs.mc_emem_arb_misc0, 14, 8);
-    table->burst_mc_regs.mc_emem_arb_misc0 |= (ADJUST(0x24) << 8);
+    table->burst_mc_regs.mc_emem_arb_misc0 |= u8((ADJUST(0x24) << 8)); //PRIORITY_INVERSION_THRESHOLD
     CLEAR_BIT(table->burst_mc_regs.mc_emem_arb_misc0, 20, 16);
-    table->burst_mc_regs.mc_emem_arb_misc0 |= (ADJUST(12) << 16);
+    table->burst_mc_regs.mc_emem_arb_misc0 |= u8((ADJUST(12) << 16)); //PRIORITY_INVERSION_ISO_THRESHOLD
 
     // updown registers
-    #define ADJUST_PARAM_LA_SCALE_REG(TABLE, PARAM, VALUE) \
+    #define ADJUST_PARAM_LA_SCALE_REG(TABLE, PARAM) \
+        TABLE->la_scale_regs.PARAM = ADJUST(TABLE->la_scale_regs.PARAM)
+
+    #define ADJUST_PARAM_LA_SCALE_REG_HI(TABLE, PARAM, VALUE) \
         CLEAR_BIT(TABLE->la_scale_regs.PARAM, 23, 16)   \
         TABLE->la_scale_regs.PARAM |= VALUE << 16
 
-    #define ADJUST_PARAM_LA_SCALE_REG_2(TABLE, PARAM, VALUE) \
+    #define ADJUST_PARAM_LA_SCALE_REG_LO(TABLE, PARAM, VALUE) \
         CLEAR_BIT(TABLE->la_scale_regs.PARAM, 7, 0)   \
         TABLE->la_scale_regs.PARAM |= VALUE
 
-    ADJUST_PARAM_TABLE(table, la_scale_regs.mc_mll_mpcorer_ptsa_rate, ref);
-    ADJUST_PARAM_TABLE(table, la_scale_regs.mc_ptsa_grant_decrement, ref);
+    u8 LA = ADJUST_INVERSE(128); //0x80
+    ADJUST_PARAM_LA_SCALE_REG(table, mc_mll_mpcorer_ptsa_rate); //208
+    ADJUST_PARAM_LA_SCALE_REG(table, mc_ptsa_grant_decrement); //4611
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_xusb_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_xusb_1, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_tsec_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_sdmmca_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_sdmmcaa_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_sdmmc_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_sdmmcab_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_sdmmc_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_sdmmcab_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_ppcs_1, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_mpcore_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_avpc_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_gpu_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_gpu2_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_nvenc_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_nvdec_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_vic_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_HI(table, mc_latency_allowance_isp2_1, LA);
 
-    u32 LA = ADJUST_INVERSE(128);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_xusb_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_xusb_1, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_tsec_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_sdmmca_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_sdmmcaa_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_sdmmc_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_sdmmcab_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_sdmmc_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_sdmmcab_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_ppcs_1, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_mpcore_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_avpc_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_gpu_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_gpu2_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_nvenc_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_nvdec_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_vic_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG(table, mc_latency_allowance_isp2_1, LA);
-
-    ADJUST_PARAM_LA_SCALE_REG_2(table, mc_latency_allowance_hc_0, ADJUST_INVERSE(0x16));
-    ADJUST_PARAM_LA_SCALE_REG_2(table, mc_latency_allowance_hc_1, LA);
-    ADJUST_PARAM_LA_SCALE_REG_2(table, mc_latency_allowance_vi2_0, LA);
-    ADJUST_PARAM_LA_SCALE_REG_2(table, mc_latency_allowance_isp2_1, LA);
+    ADJUST_PARAM_LA_SCALE_REG_LO(table, mc_latency_allowance_hc_0, ADJUST_INVERSE(0x16));
+    ADJUST_PARAM_LA_SCALE_REG_LO(table, mc_latency_allowance_hc_1, LA);
+    ADJUST_PARAM_LA_SCALE_REG_LO(table, mc_latency_allowance_gpu_0, ADJUST_INVERSE(0x19));
+    ADJUST_PARAM_LA_SCALE_REG_LO(table, mc_latency_allowance_gpu2_0, ADJUST_INVERSE(0x19));
+    ADJUST_PARAM_LA_SCALE_REG_LO(table, mc_latency_allowance_vic_0, ADJUST_INVERSE(0x1d));
+    ADJUST_PARAM_LA_SCALE_REG_LO(table, mc_latency_allowance_vi2_0, LA);
+    ADJUST_PARAM_LA_SCALE_REG_LO(table, mc_latency_allowance_isp2_1, LA);
 
     //Spread Spectrum Control
     table->pllm_ss_ctrl1 = 0x0b55fe01;
