@@ -153,10 +153,10 @@ void MemMtcTableAutoAdjust(MarikoMtcTable* table, const MarikoMtcTable* ref) {
     WRITE_PARAM_ALL_REG(table, emc_rfcpb,               GET_CYCLE_CEIL(tRFCpb));
     WRITE_PARAM_ALL_REG(table, emc_ras,                 GET_CYCLE_CEIL(tRAS));
     WRITE_PARAM_ALL_REG(table, emc_rp,                  GET_CYCLE_CEIL(tRPpb));
-    WRITE_PARAM_ALL_REG(table, emc_r2w,                 R2W + 8);
-    WRITE_PARAM_ALL_REG(table, emc_w2r,                 W2R - 6);
+    WRITE_PARAM_ALL_REG(table, emc_r2w,                 R2W);
+    WRITE_PARAM_ALL_REG(table, emc_w2r,                 W2R);
     WRITE_PARAM_ALL_REG(table, emc_r2p,                 GET_CYCLE_CEIL(tRTP));
-    WRITE_PARAM_ALL_REG(table, emc_w2p,                 WTP - 7);
+    WRITE_PARAM_ALL_REG(table, emc_w2p,                 WTP);
     WRITE_PARAM_ALL_REG(table, emc_trtm,                RTM);
     WRITE_PARAM_ALL_REG(table, emc_twtm,                WTM);
     WRITE_PARAM_ALL_REG(table, emc_tratm,               RATM);
@@ -211,10 +211,10 @@ void MemMtcTableAutoAdjust(MarikoMtcTable* table, const MarikoMtcTable* ref) {
     WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_timing_faw,     CEIL(GET_CYCLE_CEIL(tFAW) / MC_ARB_DIV) - 1)
     WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_timing_rrd,     CEIL(GET_CYCLE_CEIL(tRRD) / MC_ARB_DIV) - 1)
     WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_timing_rap2pre, CEIL(GET_CYCLE_CEIL(tRTP) / MC_ARB_DIV))
-    WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_timing_wap2pre, CEIL((WTP-7) / MC_ARB_DIV))
+    WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_timing_wap2pre, CEIL((WTP) / MC_ARB_DIV))
     WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_timing_r2r,     CEIL(table->burst_regs.emc_rext / MC_ARB_DIV) - 1 + MC_ARB_SFA)
-    WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_timing_r2w,     CEIL((R2W+8) / MC_ARB_DIV) - 1 + MC_ARB_SFA)
-    WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_timing_w2r,     CEIL((W2R-6) / MC_ARB_DIV) - 1 + MC_ARB_SFA)
+    WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_timing_r2w,     CEIL((R2W) / MC_ARB_DIV) - 1 + MC_ARB_SFA)
+    WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_timing_w2r,     CEIL((W2R) / MC_ARB_DIV) - 1 + MC_ARB_SFA)
     WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_timing_rfcpb,   CEIL(GET_CYCLE_CEIL(tRFCpb) / MC_ARB_DIV))
 
     u32 DA_TURNS = 0;
@@ -286,7 +286,7 @@ void MemMtcTableAutoAdjust(MarikoMtcTable* table, const MarikoMtcTable* ref) {
 
     table->dram_timings.t_rp = tRPpb;
     table->dram_timings.t_rfc = tRFCab;
-    table->dram_timings.rl = RL;
+    //table->dram_timings.rl = 32;
 
     table->emc_cfg_2 = 0x0011083d;
 }
@@ -368,6 +368,18 @@ void MemMtcTableCustomAdjust(MarikoMtcTable* table) {
         table->burst_mc_regs.mc_emem_arb_timing_r2w     = CEIL(R2W / MC_ARB_DIV) - 1 + MC_ARB_SFA;
         table->burst_mc_regs.mc_emem_arb_timing_w2r     = CEIL(W2R / MC_ARB_DIV) - 1 + MC_ARB_SFA;
     }
+
+    u32 DA_TURNS = 0;
+    DA_TURNS |= u8(table->burst_mc_regs.mc_emem_arb_timing_r2w / 2) << 16; //R2W TURN
+    DA_TURNS |= u8(table->burst_mc_regs.mc_emem_arb_timing_w2r / 2) << 24; //W2R TURN
+    WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_da_turns,       DA_TURNS);
+    u32 DA_COVERS = 0;
+    u8 R_COVER = (table->burst_mc_regs.mc_emem_arb_timing_rap2pre + table->burst_mc_regs.mc_emem_arb_timing_rp + table->burst_mc_regs.mc_emem_arb_timing_rcd) / 2;
+    u8 W_COVER = (table->burst_mc_regs.mc_emem_arb_timing_wap2pre + table->burst_mc_regs.mc_emem_arb_timing_rp + table->burst_mc_regs.mc_emem_arb_timing_rcd) / 2;
+    DA_COVERS |= (u8)(table->burst_mc_regs.mc_emem_arb_timing_rc / 2); //RC COVER
+    DA_COVERS |= (R_COVER << 8); //RCD_R COVER
+    DA_COVERS |= (W_COVER << 16); //RCD_W COVER
+    WRITE_PARAM_BURST_MC_REG(table, mc_emem_arb_da_covers,       DA_COVERS);
 }
 
 void MemMtcPllmbDivisor(MarikoMtcTable* table) {
@@ -451,6 +463,7 @@ Result MemFreqDvbTable(u32* ptr) {
     if (C.marikoEmcMaxClock <= EmcClkOSLimit)
         R_SKIP();
 
+    u32 voltAdd = 25*C.marikoEmcDvbShift;
     if (C.marikoEmcMaxClock < 1862400) {
         std::memcpy(new_start, default_end, sizeof(emc_dvb_dvfs_table_t));
     } else if (C.marikoEmcMaxClock < 2131200){
@@ -460,13 +473,22 @@ Result MemFreqDvbTable(u32* ptr) {
         emc_dvb_dvfs_table_t oc_table = { 2131200, { 725, 700, 675, } };
         std::memcpy(new_start, &oc_table, sizeof(emc_dvb_dvfs_table_t));
     } else if (C.marikoEmcMaxClock < 2665600){
-        emc_dvb_dvfs_table_t oc_table = { 2400000, { s32(750+25*C.marikoEmcDvbShift), s32(725+25*C.marikoEmcDvbShift), s32(700+25*C.marikoEmcDvbShift), } };
+        emc_dvb_dvfs_table_t oc_table = { 2400000, { s32(750+voltAdd), s32(725+voltAdd), s32(700+voltAdd), } };
+        std::memcpy(new_start, &oc_table, sizeof(emc_dvb_dvfs_table_t));
+    } else if (C.marikoEmcMaxClock < 2931200){
+        emc_dvb_dvfs_table_t oc_table = { 2665600, { s32(775+voltAdd), s32(750+voltAdd), s32(725+voltAdd), } };
+        std::memcpy(new_start, &oc_table, sizeof(emc_dvb_dvfs_table_t));
+    } else if (C.marikoEmcMaxClock < 3200000){
+        emc_dvb_dvfs_table_t oc_table = { 2931200, { s32(800+voltAdd), s32(775+voltAdd), s32(750+voltAdd), } };
         std::memcpy(new_start, &oc_table, sizeof(emc_dvb_dvfs_table_t));
     } else {
-        emc_dvb_dvfs_table_t oc_table = { 2665600, { s32(775+25*C.marikoEmcDvbShift), s32(750+25*C.marikoEmcDvbShift), s32(725+25*C.marikoEmcDvbShift), } };
+        emc_dvb_dvfs_table_t oc_table = { 3200000, { s32(800+voltAdd), s32(800+voltAdd), s32(775+voltAdd), } };
         std::memcpy(new_start, &oc_table, sizeof(emc_dvb_dvfs_table_t));
     }
     new_start->freq = C.marikoEmcMaxClock;
+    /* Max dvfs entry is 32, but HOS doesn't seem to boot if exact freq doesn't exist in dvb table,
+       reason why it's like this 
+    */ 
 
     R_SUCCEED();
 }
