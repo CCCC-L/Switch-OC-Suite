@@ -1,6 +1,8 @@
 /*
  * Copyright (C) Switch-OC-Suite
  *
+ * Copyright (c) 2023 hanai3Bi
+ * 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
@@ -90,6 +92,8 @@ volatile CustomizeTable C = {
 .marikoCpuUV = 0,
 
 .marikoGpuUV = 0,
+
+.commonGpuVoltOffset = 0,
 
 .marikoEmcDvbShift = 0,
 

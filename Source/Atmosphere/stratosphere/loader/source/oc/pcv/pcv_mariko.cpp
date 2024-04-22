@@ -1,6 +1,8 @@
 /*
  * Copyright (C) Switch-OC-Suite
  *
+ * Copyright (c) 2023 hanai3Bi
+ * 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
@@ -495,7 +497,10 @@ Result MemFreqDvbTable(u32* ptr) {
     if (C.marikoEmcMaxClock <= EmcClkOSLimit)
         R_SKIP();
 
-    u32 voltAdd = 25*C.marikoEmcDvbShift;
+    int32_t voltAdd = 25*C.marikoEmcDvbShift;
+
+    #define DVB_VOLT(zero, one, two)    std::min(zero+voltAdd, 1050), std::min(one+voltAdd, 1025), std::min(two+voltAdd, 1000),
+
     if (C.marikoEmcMaxClock < 1862400) {
         std::memcpy(new_start, default_end, sizeof(emc_dvb_dvfs_table_t));
     } else if (C.marikoEmcMaxClock < 2131200){
@@ -505,16 +510,16 @@ Result MemFreqDvbTable(u32* ptr) {
         emc_dvb_dvfs_table_t oc_table = { 2131200, { 725, 700, 675, } };
         std::memcpy(new_start, &oc_table, sizeof(emc_dvb_dvfs_table_t));
     } else if (C.marikoEmcMaxClock < 2665600){
-        emc_dvb_dvfs_table_t oc_table = { 2400000, { s32(750+voltAdd), s32(725+voltAdd), s32(700+voltAdd), } };
+        emc_dvb_dvfs_table_t oc_table = { 2400000, { DVB_VOLT(750, 725, 700) } };
         std::memcpy(new_start, &oc_table, sizeof(emc_dvb_dvfs_table_t));
     } else if (C.marikoEmcMaxClock < 2931200){
-        emc_dvb_dvfs_table_t oc_table = { 2665600, { s32(775+voltAdd), s32(750+voltAdd), s32(725+voltAdd), } };
+        emc_dvb_dvfs_table_t oc_table = { 2665600, { DVB_VOLT(775, 750, 725) } };
         std::memcpy(new_start, &oc_table, sizeof(emc_dvb_dvfs_table_t));
     } else if (C.marikoEmcMaxClock < 3200000){
-        emc_dvb_dvfs_table_t oc_table = { 2931200, { s32(800+voltAdd), s32(775+voltAdd), s32(750+voltAdd), } };
+        emc_dvb_dvfs_table_t oc_table = { 2931200, { DVB_VOLT(800, 775, 750) } };
         std::memcpy(new_start, &oc_table, sizeof(emc_dvb_dvfs_table_t));
     } else {
-        emc_dvb_dvfs_table_t oc_table = { 3200000, { s32(800+voltAdd), s32(800+voltAdd), s32(775+voltAdd), } };
+        emc_dvb_dvfs_table_t oc_table = { 3200000, { DVB_VOLT(800, 800, 775) } };
         std::memcpy(new_start, &oc_table, sizeof(emc_dvb_dvfs_table_t));
     }
     new_start->freq = C.marikoEmcMaxClock;
@@ -531,6 +536,24 @@ Result MemFreqMax(u32* ptr) {
 
     PATCH_OFFSET(ptr, C.marikoEmcMaxClock);
     R_SUCCEED();
+}
+
+Result I2cSet_U8(I2cDevice dev, u8 reg, u8 val) {
+    struct {
+        u8 reg;
+        u8 val;
+    } __attribute__((packed)) cmd;
+
+    I2cSession _session;
+    Result res = i2cOpenSession(&_session, dev);
+    if (R_FAILED(res))
+        return res;
+
+    cmd.reg = reg;
+    cmd.val = val;
+    res = i2csessionSendAuto(&_session, &cmd, sizeof(cmd), I2cTransactionOption_All);
+    i2csessionClose(&_session);
+    return res;
 }
 
 Result EmcVddqVolt(u32* ptr) {
@@ -554,9 +577,13 @@ Result EmcVddqVolt(u32* ptr) {
         R_SKIP();
 
     if (emc_uv % uv_step)
-        emc_uv = emc_uv / uv_step * uv_step; // rounding
+        emc_uv = (emc_uv + uv_step - 1) / uv_step * uv_step; // rounding
 
     PATCH_OFFSET(ptr, emc_uv);
+
+    i2cInitialize();
+    I2cSet_U8(I2cDevice_Max77812_2, 0x25, (emc_uv - uv_min) / uv_step);
+    i2cExit();
 
     R_SUCCEED();
 }

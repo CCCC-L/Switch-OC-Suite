@@ -1,6 +1,8 @@
 /*
  * Copyright (C) Switch-OC-Suite
  *
+ * Copyright (c) 2023 hanai3Bi
+ * 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
@@ -286,6 +288,13 @@ Result GpuFreqCvbTable(u32* ptr) {
             PATCH_OFFSET(&(entry->cvb_pll_param.c3), 0);
             PATCH_OFFSET(&(entry->cvb_pll_param.c4), 0);
             PATCH_OFFSET(&(entry->cvb_pll_param.c5), 0);
+            entry++;
+        }
+    }
+    else if (C.commonGpuVoltOffset) {
+        cvb_entry_t* entry = static_cast<cvb_entry_t *>(gpu_cvb_table_head);
+        for (size_t i = 0; i < customize_entry_count; i++) {
+            PATCH_OFFSET(&(entry->cvb_pll_param.c0), (entry->cvb_pll_param.c0 - C.commonGpuVoltOffset*1000));
             entry++;
         }
     }
